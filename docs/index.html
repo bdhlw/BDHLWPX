@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>编导拍播培训 · 课程看板</title>
-<link rel="stylesheet" href="./styles.css?v=e8c72f01" />
+<link rel="stylesheet" href="./styles.css?v=894c007f" />
 <link rel="icon" href="./assets/logo.png" />
 </head>
 <body>
@@ -157,10 +157,36 @@
   </div>
 </div>
 
+<!-- 维护设置弹窗（仅 ?edit=1 时可进入） -->
+<div class="modal" id="modal-maint" hidden>
+  <div class="modal-mask" data-close></div>
+  <div class="modal-panel narrow">
+    <div class="modal-head">
+      <div>
+        <h2>维护设置</h2>
+        <p class="muted">配置后，页面上的「编辑课程」「上传课程表」会直接提交到 GitHub 仓库，并自动重新发布</p>
+      </div>
+      <button class="icon-btn" data-close aria-label="关闭">✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="field"><span>仓库</span><input id="maint-repo" placeholder="用户名/仓库名" /></label>
+      <label class="field"><span>分支</span><input id="maint-branch" placeholder="main" /></label>
+      <label class="field"><span>访问令牌（Fine-grained token）</span><input id="maint-token" type="password" placeholder="github_pat_..." /></label>
+      <p class="hint">令牌只保存在这台设备的浏览器里，不会随看板发布出去。建议新建 Fine-grained token，只授权这一个仓库，权限只勾 <b>Contents: Read and write</b>。</p>
+      <div class="upload-status" id="maint-status" hidden></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost small" id="maint-clear">清除令牌</button>
+      <div class="grow"></div>
+      <button class="btn primary" id="maint-save">保存并验证</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast" hidden></div>
 
-<script>window.__BUILD__={readonly:true,builtAt:"2026-11-24T04:49:21.690Z"};</script>
-<script src="./docx-client.js?v=e8c72f01"></script>
-<script src="./app.js?v=e8c72f01"></script>
+<script>window.__BUILD__={readonly:true,builtAt:"2026-11-24T05:01:43.688Z"};</script>
+<script src="./docx-client.js?v=894c007f"></script>
+<script src="./app.js?v=894c007f"></script>
 </body>
 </html>

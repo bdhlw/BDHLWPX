@@ -91,6 +91,70 @@ const RUNTIME = { mode: 'static', draftKey: 'course-board:draft:v1' };
 const EDIT_PARAM = new URLSearchParams(location.search).get('edit') === '1';
 const READONLY = !!(window.__BUILD__ && window.__BUILD__.readonly) && !EDIT_PARAM;
 
+/* ---------------- 维护模式：把改动提交到 GitHub 仓库 ---------------- */
+const GH = {
+  key: 'course-board:gh',
+  defaults: { repo: 'bdhlw/BDHLWPX', branch: 'main', token: '' },
+  get() {
+    try { return { ...GH.defaults, ...(JSON.parse(localStorage.getItem(GH.key) || '{}') || {}) }; }
+    catch (_) { return { ...GH.defaults }; }
+  },
+  set(cfg) { localStorage.setItem(GH.key, JSON.stringify(cfg)); },
+  clear() { localStorage.removeItem(GH.key); },
+};
+
+async function ghFetch(cfg, apiPath, opts = {}) {
+  const res = await fetch('https://api.github.com' + apiPath, {
+    method: opts.method || 'GET',
+    headers: {
+      Authorization: 'token ' + cfg.token,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+    },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  let data = null;
+  try { data = await res.json(); } catch (_) { /* 空响应 */ }
+  if (!res.ok) {
+    const msg = (data && data.message) || 'GitHub API ' + res.status;
+    if (res.status === 401) throw new Error('令牌无效或已过期');
+    if (res.status === 403) throw new Error('令牌权限不足（需要该仓库的 Contents: Read and write）');
+    if (res.status === 404) throw new Error('仓库或分支不存在，或令牌无权访问');
+    throw new Error(msg);
+  }
+  return data;
+}
+
+/** 一次提交多个文件（单个 commit） */
+async function ghCommitFiles(cfg, files, message) {
+  const ref = await ghFetch(cfg, `/repos/${cfg.repo}/git/ref/heads/${cfg.branch}`);
+  const parent = ref.object.sha;
+  const base = await ghFetch(cfg, `/repos/${cfg.repo}/git/commits/${parent}`);
+
+  const tree = [];
+  for (const [filePath, content] of Object.entries(files)) {
+    const blob = await ghFetch(cfg, `/repos/${cfg.repo}/git/blobs`, {
+      method: 'POST',
+      body: { content, encoding: 'utf-8' },
+    });
+    tree.push({ path: filePath, mode: '100644', type: 'blob', sha: blob.sha });
+  }
+
+  const newTree = await ghFetch(cfg, `/repos/${cfg.repo}/git/trees`, {
+    method: 'POST',
+    body: { base_tree: base.tree.sha, tree },
+  });
+  const commit = await ghFetch(cfg, `/repos/${cfg.repo}/git/commits`, {
+    method: 'POST',
+    body: { message, tree: newTree.sha, parents: [parent] },
+  });
+  await ghFetch(cfg, `/repos/${cfg.repo}/git/refs/heads/${cfg.branch}`, {
+    method: 'PATCH',
+    body: { sha: commit.sha },
+  });
+  return commit.sha;
+}
+
 async function fetchData() {
   // 1) 有本地服务时优先走服务端
   try {
@@ -152,6 +216,13 @@ function applyModeUI() {
       badge.textContent = '只读看板';
       badge.className = 'mode-badge readonly';
       badge.title = '课程内容由维护者更新；如需临时编辑，在网址后加 ?edit=1。';
+    } else if (isStatic && EDIT_PARAM) {
+      const on = !!GH.get().token;
+      badge.textContent = on ? '维护模式 · 已连接' : '维护模式 · 未配置';
+      badge.className = 'mode-badge clickable ' + (on ? 'server' : 'static');
+      badge.title = on
+        ? `点击可修改仓库 / 令牌（当前 ${GH.get().repo} · ${GH.get().branch}）`
+        : '点击配置仓库与令牌，之后可在此页直接修改并发布';
     } else {
       badge.textContent = isStatic ? '静态版 · 改动存本机' : '本地服务版';
       badge.className = 'mode-badge ' + (isStatic ? 'static' : 'server');
@@ -577,6 +648,69 @@ function toast(msg) {
   toastTimer = setTimeout(() => (el.hidden = true), 2600);
 }
 
+/* ============================ 维护设置 ============================ */
+
+function openMaint() {
+  const cfg = GH.get();
+  $('#maint-repo').value = cfg.repo;
+  $('#maint-branch').value = cfg.branch;
+  $('#maint-token').value = cfg.token;
+  $('#maint-status').hidden = true;
+  openModal('#modal-maint');
+}
+
+$('#mode-badge').addEventListener('click', () => {
+  if (EDIT_PARAM && RUNTIME.mode === 'static') openMaint();
+});
+
+$('#maint-save').addEventListener('click', async () => {
+  const cfg = {
+    repo: $('#maint-repo').value.trim(),
+    branch: $('#maint-branch').value.trim() || 'main',
+    token: $('#maint-token').value.trim(),
+  };
+  const st = $('#maint-status');
+  st.hidden = false;
+
+  if (!/^[^/\s]+\/[^/\s]+$/.test(cfg.repo)) {
+    st.className = 'upload-status err';
+    st.textContent = '仓库格式应为「用户名/仓库名」，例如 bdhlw/BDHLWPX';
+    return;
+  }
+  if (!cfg.token) {
+    st.className = 'upload-status err';
+    st.textContent = '请填写访问令牌';
+    return;
+  }
+
+  st.className = 'upload-status loading';
+  st.textContent = '正在验证仓库与令牌…';
+  try {
+    const repo = await ghFetch(cfg, `/repos/${cfg.repo}`);
+    const ref = await ghFetch(cfg, `/repos/${cfg.repo}/git/ref/heads/${cfg.branch}`);
+    GH.set(cfg);
+    applyModeUI();
+    st.className = 'upload-status';
+    st.textContent =
+      `✓ 已连接 ${repo.full_name}（${cfg.branch}，当前提交 ${ref.object.sha.slice(0, 7)}）。` +
+      '现在可以直接编辑或上传，保存后会提交到仓库并自动重新发布。';
+    toast('维护模式已就绪');
+  } catch (err) {
+    st.className = 'upload-status err';
+    st.textContent = '验证失败：' + err.message;
+  }
+});
+
+$('#maint-clear').addEventListener('click', () => {
+  GH.clear();
+  $('#maint-token').value = '';
+  const st = $('#maint-status');
+  st.hidden = false;
+  st.className = 'upload-status';
+  st.textContent = '已清除本机保存的令牌。之后保存只写入本机浏览器，不会发布。';
+  applyModeUI();
+});
+
 /* ============================ 编辑课程 ============================ */
 
 $('#btn-edit').addEventListener('click', () => openEdit(null));
@@ -701,10 +835,15 @@ $('#btn-save').addEventListener('click', async () => {
     closeModal('#modal-edit');
     applyModeUI();
     renderAll();
-    toast(
-      `已保存 ${clean.length} 节课${dropped ? `（忽略了 ${dropped} 条没有课名的空行）` : ''}` +
-        (saved.mode === 'static' ? ' · 存在本机浏览器' : '')
-    );
+    const tail =
+      saved.mode === 'github'
+        ? ' · 已提交到 GitHub，约 1 分钟全站生效'
+        : saved.mode === 'github-error'
+        ? ' · 提交 GitHub 失败（' + saved.error + '），已存在本机浏览器'
+        : saved.mode === 'static'
+        ? ' · 存在本机浏览器'
+        : '';
+    toast(`已保存 ${clean.length} 节课${dropped ? `（忽略了 ${dropped} 条没有课名的空行）` : ''}${tail}`);
   } catch (err) {
     toast('保存失败：' + err.message);
   }
@@ -723,7 +862,24 @@ async function persistSessions(list) {
     if (!res.ok || !out.ok) throw new Error(out.error || '保存失败');
     return { mode: 'server' };
   }
+  // 先把本机草稿写一份，保证维护者刷新后立刻看到自己的改动
   localStorage.setItem(RUNTIME.draftKey, JSON.stringify(payload));
+
+  const cfg = GH.get();
+  if (EDIT_PARAM && cfg.token) {
+    const json = JSON.stringify(payload, null, 2);
+    try {
+      const sha = await ghCommitFiles(
+        cfg,
+        { 'data/courses.json': json, 'docs/data/courses.json': json },
+        `更新课程表：${new Date().toLocaleString('zh-CN')}`
+      );
+      return { mode: 'github', sha };
+    } catch (err) {
+      // 提交失败不丢改动：本机草稿已写入，下次刷新仍能看到
+      return { mode: 'github-error', error: err.message };
+    }
+  }
   return { mode: 'static' };
 }
 
@@ -794,6 +950,7 @@ async function uploadFile(file) {
   try {
     const buf = await file.arrayBuffer();
     let out;
+    let saved = { mode: RUNTIME.mode };
 
     if (RUNTIME.mode === 'server') {
       const res = await fetch(`api/upload?filename=${encodeURIComponent(file.name)}`, {
@@ -821,21 +978,28 @@ async function uploadFile(file) {
         meta: { ...(state.data.meta || {}), ...(out.meta || {}), source: out.source, updatedAt: new Date().toISOString(), localDraft: true },
         sessions: out.sessions,
       };
-      await persistSessions(out.sessions);
+      saved = await persistSessions(out.sessions);
       applyModeUI();
       renderAll();
     }
 
-    status.className = 'upload-status';
-    status.textContent = `✓ 已读取「${out.source}」，共识别 ${out.total} 节课，看板已同步更新。` +
-      (RUNTIME.mode === 'static' ? '（保存在本机浏览器）' : '');
+    const tail =
+      RUNTIME.mode === 'static'
+        ? saved.mode === 'github'
+          ? '已提交到 GitHub，约 1 分钟后全站生效。'
+          : saved.mode === 'github-error'
+          ? `提交 GitHub 失败（${saved.error}），改动已存在本机浏览器。`
+          : '（保存在本机浏览器）'
+        : '';
+    status.className = saved.mode === 'github-error' ? 'upload-status err' : 'upload-status';
+    status.textContent = `✓ 已读取「${out.source}」，共识别 ${out.total} 节课，看板已同步更新。` + tail;
     renderSourceBox();
     toast(`课程表已更新，共 ${out.total} 节课`);
     fileInput.value = '';
-    setTimeout(() => closeModal('#modal-upload'), 1400);
+    setTimeout(() => closeModal('#modal-upload'), saved.mode === 'github-error' ? 4000 : 1400);
   } catch (err) {
     status.className = 'upload-status err';
-    status.textContent = `解析失败：${err.message}\n请确认文档中包含“时间 / 培训项目名称 / 授课教师 / 参与学生人数”四列的表格。`;
+    status.textContent = `处理失败：${err.message}\n请确认文档中包含“时间 / 培训项目名称 / 授课教师 / 参与学生人数”四列的表格。`;
   }
 }
 
