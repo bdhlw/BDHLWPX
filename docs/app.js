@@ -235,7 +235,9 @@ function renderOverview() {
   const meta = state.data.meta || {};
   const src = meta.source ? `数据来源：${meta.source}` : '数据来源：本地课程表';
   const up = meta.updatedAt ? ` · 更新于 ${new Date(meta.updatedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : '';
-  $('#meta-line').textContent = `${meta.subtitle || '2026-2027学年度 · 产学研发展中心'}　|　${src}${up}`;
+  $('#meta-line').innerHTML =
+    `<span class="meta-sub">${esc(meta.subtitle || '2026-2027学年度 · 产学研发展中心')}</span>` +
+    `<span class="meta-src">　|　${esc(src)}${esc(up)}</span>`;
 
   const wrap = $('#track-cards');
   wrap.innerHTML = presentTracks().map((key) => {

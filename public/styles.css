@@ -82,7 +82,7 @@ button { font-family: inherit; cursor: pointer; }
   user-select: none;
   -webkit-user-drag: none;
 }
-.brand-text { min-width: 0; }
+.brand-text { min-width: 0; overflow: hidden; }
 .brand h1 {
   font-size: 21px;
   font-weight: 600;
@@ -93,7 +93,15 @@ button { font-family: inherit; cursor: pointer; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.brand .sub { margin: 1px 0 0; font-size: 12px; color: var(--muted); }
+.brand .sub {
+  margin: 1px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.meta-src { color: var(--muted); }
 .topbar-actions { display: flex; gap: 8px; flex: none; align-items: center; }
 .mode-badge {
   font-size: 11.5px;
@@ -671,14 +679,58 @@ main { max-width: 1800px; margin: 0 auto; padding: 20px var(--pad) 56px; }
 @media (max-width: 1080px) {
   .overview { grid-template-columns: 1fr; }
 }
+/* ---------------- 移动端 ---------------- */
 @media (max-width: 820px) {
-  main { padding: 16px 14px 48px; }
-  .topbar { padding: 12px 14px; }
-  .brand h1 { font-size: 14px; }
-  .track-grid { grid-template-columns: 1fr; }
+  main { padding: 14px 12px 44px; }
+
+  /* 顶栏：品牌独占一行，操作区落到第二行，避免挤成竖排 */
+  .topbar {
+    padding: 10px 12px;
+    row-gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    position: static;
+  }
+  .brand { flex: 1 1 100%; gap: 10px; min-width: 0; }
+  .brand-logo { height: 30px; }
+  .brand h1 { font-size: 15px; }
+  .brand .sub { font-size: 11px; margin-top: 0; }
+  .meta-src { display: none; }
+  .topbar-actions { width: 100%; justify-content: flex-end; gap: 8px; }
+  .topbar-actions .mode-badge { margin-right: auto; }
+
+  .track-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .week-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .week-col { border-bottom: 1px solid var(--line); min-height: 140px; }
   .month-cell { min-height: 92px; }
   .modal { padding: 10px; }
+  .modal-head { padding: 14px 16px 12px; }
+  .modal-body { padding: 12px 16px; }
+  .modal-foot { padding: 10px 16px; }
   .btn span.lbl { display: none; }
+
+  .viewbar { gap: 10px; }
+  .segmented { width: 100%; }
+  .segmented button { flex: 1 1 0; padding: 7px 0; }
+  .viewbar-right { width: 100%; justify-content: space-between; }
+  .chips { flex: 1 1 auto; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { flex: none; }
+}
+
+@media (max-width: 560px) {
+  .track-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 430px) {
+  .mode-badge { display: none; }
+  .topbar-actions .btn { flex: 1 1 0; justify-content: center; }
+  .week-grid { grid-template-columns: 1fr; }
+  .week-col { min-height: 0; }
+  .week-col-body { padding: 8px 10px; }
+  .track-name { font-size: 18px; }
+  .track-ratio b { font-size: 34px; }
+  .mchip { font-size: 11px; padding: 2px 5px; }
+  .month-cell { min-height: 86px; padding: 5px 4px 6px; }
+  .month-dow div { padding: 6px 6px; font-size: 11px; }
 }
