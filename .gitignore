@@ -1,0 +1,4 @@
+node_modules/
+data/backup/
+data/.upload-*
+.DS_Store

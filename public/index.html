@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>编导拍播培训 · 课程看板</title>
+<link rel="stylesheet" href="./styles.css" />
+<link rel="icon" href="./assets/logo.png" />
+</head>
+<body>
+
+<div class="brandbar"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <img class="brand-logo" src="./assets/logo.png" alt="邦德 · 产学研" />
+    <div class="brand-text">
+      <h1>互联网“编导拍播”培训 · 课程看板</h1>
+      <p class="sub" id="meta-line">2026-2027学年度 · 产学研发展中心</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <span class="mode-badge" id="mode-badge"></span>
+    <button class="btn ghost" id="btn-upload">
+      <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14V3m0 0L6 7m4-4l4 4"/><path d="M3 13v3a2 2 0 002 2h10a2 2 0 002-2v-3"/></svg>
+      上传课程表
+    </button>
+    <button class="btn primary" id="btn-edit">
+      <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 3.5l3 3L7 16H4v-3z"/></svg>
+      编辑课程
+    </button>
+  </div>
+</header>
+
+<main>
+  <!-- 总览 -->
+  <section class="overview">
+    <div class="card total-card">
+      <div class="total-head">
+        <span class="card-label">总课程数</span>
+        <span class="pill" id="cycle-pill">—</span>
+      </div>
+      <div class="total-number"><span id="stat-total">0</span><em>节</em></div>
+      <div class="total-split">
+        <span><i class="dot done"></i>已上 <b id="stat-done">0</b></span>
+        <span><i class="dot todo"></i>待上 <b id="stat-todo">0</b></span>
+      </div>
+      <div class="bar"><span id="stat-bar" style="width:0%"></span></div>
+      <div class="total-foot" id="stat-foot">—</div>
+    </div>
+
+    <div class="track-grid" id="track-cards"></div>
+  </section>
+
+  <!-- 视图切换 -->
+  <section class="views">
+    <div class="viewbar">
+      <div class="segmented" id="segmented">
+        <button data-view="week" class="active">周视图</button>
+        <button data-view="month">月视图</button>
+        <button data-view="year">年视图</button>
+      </div>
+      <div class="viewbar-right">
+        <div class="nav-group" id="nav-group">
+          <button class="nav-btn" id="nav-prev" aria-label="上一个">‹</button>
+          <button class="nav-btn today" id="nav-today">今天</button>
+          <button class="nav-btn" id="nav-next" aria-label="下一个">›</button>
+        </div>
+        <div class="chips" id="filters"></div>
+      </div>
+    </div>
+
+    <div class="view-title" id="view-title">—</div>
+
+    <div class="panel" id="panel-week"></div>
+    <div class="panel" id="panel-month" hidden></div>
+    <div class="panel" id="panel-year" hidden></div>
+  </section>
+</main>
+
+<!-- 编辑课程弹窗 -->
+<div class="modal" id="modal-edit" hidden>
+  <div class="modal-mask" data-close></div>
+  <div class="modal-panel">
+    <div class="modal-head">
+      <div>
+        <h2>编辑课程安排</h2>
+        <p class="muted" id="edit-hint">修改后保存，看板会立即更新（自动备份上一版）</p>
+      </div>
+      <button class="icon-btn" data-close aria-label="关闭">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="edit-toolbar">
+        <button class="btn small ghost" id="btn-add-row">＋ 新增课程</button>
+        <button class="btn small ghost" id="btn-export">导出 JSON</button>
+        <span class="spacer"></span>
+        <span class="muted small" id="edit-count">共 0 节</span>
+      </div>
+      <div class="edit-table-wrap">
+        <table class="edit-table">
+          <thead>
+            <tr>
+              <th style="width:118px">日期</th>
+              <th style="width:76px">开始</th>
+              <th style="width:76px">结束</th>
+              <th>课程名称</th>
+              <th style="width:152px">授课教师</th>
+              <th style="width:78px">人数</th>
+              <th style="width:196px">方向</th>
+              <th style="width:44px"></th>
+            </tr>
+          </thead>
+          <tbody id="edit-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <span class="muted small">提示：日期用日期选择器，时间留空表示待定</span>
+      <div class="grow"></div>
+      <button class="btn ghost" data-close>取消</button>
+      <button class="btn primary" id="btn-save">保存修改</button>
+    </div>
+  </div>
+</div>
+
+<!-- 上传课程表弹窗 -->
+<div class="modal" id="modal-upload" hidden>
+  <div class="modal-mask" data-close></div>
+  <div class="modal-panel narrow">
+    <div class="modal-head">
+      <div>
+        <h2>上传新的课程表</h2>
+        <p class="muted">上传 .docx 课程安排，看板会自动重新读取并覆盖当前数据</p>
+      </div>
+      <button class="icon-btn" data-close aria-label="关闭">✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="dropzone" id="dropzone">
+        <input type="file" id="file-input" accept=".docx,.csv,.json" hidden />
+        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 15v3.5A2.5 2.5 0 006.5 21h11A2.5 2.5 0 0020 18.5V15"/></svg>
+        <strong>点击选择文件，或直接拖进来</strong>
+        <span class="muted small">支持 .docx（推荐）/ .csv / .json，单个文件不超过 40MB</span>
+      </label>
+      <div class="upload-status" id="upload-status" hidden></div>
+      <ul class="tips">
+        <li>文档里需要有表格，且四列含义为：<b>时间</b>（含「2026年11月10日 周二」）、<b>培训项目名称</b>、<b>授课教师</b>、<b>参与学生人数</b>。</li>
+        <li>时间列里写了「17:30-19:30」会自动识别为上课时段，没写则显示为「待定」。</li>
+        <li>方向按课程名关键词自动归类（膳食 / 工作坊 / 自媒体IP）；试听、动员会、宣讲会归入「公共课程」，只计入总数、不参与方向进度。上传后可在「编辑课程」里手动改。</li>
+        <li id="tip-backup">上传前的版本会自动备份到 <code>data/backup/</code>，误传可从历史数据恢复。</li>
+      </ul>
+      <div class="meta-box" id="source-box"></div>
+    </div>
+    <div class="modal-foot">
+      <div class="grow"></div>
+      <button class="btn ghost" data-close>关闭</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="./docx-client.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

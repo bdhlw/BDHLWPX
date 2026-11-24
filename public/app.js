@@ -1,0 +1,827 @@
+'use strict';
+
+/* ============================ 基础常量 ============================ */
+
+const TRACK_META = {
+  ip:       { key: 'ip',       name: '“自媒体IP”方向',   short: 'IP 培训',   hex: '#e04a32', soft: '#fdeeeb', desc: '试听课 · 系统课 · 中级课程' },
+  meal:     { key: 'meal',     name: '“邦德膳食”方向',   short: '膳食培训',  hex: '#2aa25a', soft: '#e8f6ee', desc: '系列实操课 · 每周两次' },
+  workshop: { key: 'workshop', name: '“邦德自媒体骨干工作坊”方向', short: '工作坊',    hex: '#d9861f', soft: '#fdf3e4', desc: '骨干培养 · 例会 · 结营' },
+  live:     { key: 'live',     name: '“直播运营”方向',   short: '直播运营',  hex: '#36485a', soft: '#e9eef3', desc: '计划 8 节 · 首节宣讲已排期' },
+  common:   { key: 'common',   name: '公共课程',       short: '公共课程',  hex: '#8b8681', soft: '#f0ede9', desc: '试听 · 动员 · 宣讲，仅计入总数' },
+  other:    { key: 'other',    name: '其他方向',       short: '其他',      hex: '#a8a29b', soft: '#f2efeb', desc: '未归类课程' },
+};
+// 只有这些是「方向」，参与方向进度统计
+const TRACK_ORDER = ['ip', 'meal', 'workshop', 'live'];
+// 公共课程：计入总课程数，但不计入任何方向的进度
+const COMMON = ['common'];
+
+const KIND_LABEL = {
+  lesson: '常规课',
+  trial: '试听',
+  public: '项目活动',
+  milestone: '节点',
+};
+
+const DOW = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+/* ============================ 工具函数 ============================ */
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+function iso(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function parseISO(s) {
+  const [y, m, d] = String(s).split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+function startOfDay(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+function addDays(d, n) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+function startOfWeek(d) {
+  const x = startOfDay(d);
+  const diff = (x.getDay() + 6) % 7; // 周一为一周开始
+  return addDays(x, -diff);
+}
+function sameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function trackOf(key) {
+  return TRACK_META[key] || TRACK_META.other;
+}
+function fmtMD(dateStr) {
+  const d = parseISO(dateStr);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+function timeText(s) {
+  if (s.start && s.end) return `${s.start}–${s.end}`;
+  if (s.start) return s.start;
+  return '时间待定';
+}
+
+/* ============================ 状态 ============================ */
+
+const state = {
+  data: { meta: {}, sessions: [] },
+  view: 'week',
+  cursor: startOfDay(new Date()),   // 当前聚焦日期
+  filter: 'all',
+  today: startOfDay(new Date()),
+  editing: [],
+};
+
+const TODAY_ISO = iso(state.today);
+
+/* ============================ 数据加载 ============================ */
+
+/* 运行模式：server = 本地 Node 服务（可写文件）；static = GitHub Pages / 纯静态 */
+const RUNTIME = { mode: 'static', draftKey: 'course-board:draft:v1' };
+
+async function fetchData() {
+  // 1) 有本地服务时优先走服务端
+  try {
+    const res = await fetch('api/data', { cache: 'no-store' });
+    const ct = res.headers.get('content-type') || '';
+    if (res.ok && ct.includes('application/json')) {
+      RUNTIME.mode = 'server';
+      return await res.json();
+    }
+  } catch (_) { /* 静态托管下这里会 404，正常的 */ }
+
+  // 2) 静态模式：读仓库里的 data/courses.json，再叠加本机浏览器的草稿
+  RUNTIME.mode = 'static';
+  const res = await fetch('data/courses.json', { cache: 'no-store' });
+  if (!res.ok) throw new Error('读不到 data/courses.json');
+  const d = await res.json();
+  try {
+    const raw = localStorage.getItem(RUNTIME.draftKey);
+    if (raw) {
+      const draft = JSON.parse(raw);
+      if (draft && Array.isArray(draft.sessions) && draft.sessions.length) {
+        d.sessions = draft.sessions;
+        d.meta = { ...(d.meta || {}), ...(draft.meta || {}), localDraft: true };
+      }
+    }
+  } catch (_) { /* 草稿损坏就忽略 */ }
+  return d;
+}
+
+async function loadData() {
+  try {
+    state.data = await fetchData();
+  } catch (e) {
+    toast('课程数据读取失败：' + e.message);
+    return;
+  }
+  state.data.sessions = (state.data.sessions || []).map((s, i) => ({
+    id: s.id || `s${i}`,
+    date: s.date,
+    start: s.start || '',
+    end: s.end || '',
+    title: s.title || '',
+    teacher: s.teacher || '',
+    expected: s.expected || '',
+    track: TRACK_META[s.track] ? s.track : 'other',
+    kind: s.kind || 'lesson',
+  }));
+  applyModeUI();
+  renderAll();
+}
+
+/* 按照运行模式切换文案（静态版没有服务端，改动只存本机浏览器） */
+function applyModeUI() {
+  const isStatic = RUNTIME.mode === 'static';
+  const badge = $('#mode-badge');
+  if (badge) {
+    badge.textContent = isStatic ? '静态版 · 改动存本机' : '本地服务版';
+    badge.className = 'mode-badge ' + (isStatic ? 'static' : 'server');
+    badge.title = isStatic
+      ? '这是 GitHub Pages 静态版：编辑与上传的结果保存在当前浏览器，可「导出 JSON」覆盖仓库里的 data/courses.json 让所有人看到。'
+      : '本地 Node 服务版：编辑与上传会直接写入 data/courses.json，并自动备份。';
+  }
+  const hint = $('#edit-hint');
+  if (hint) {
+    hint.textContent = isStatic
+      ? '改动保存在本机浏览器（可「导出 JSON」后覆盖仓库数据，让其他人也看到）'
+      : '修改后保存，看板会立即更新（自动备份上一版）';
+  }
+  const tip = $('#tip-backup');
+  if (tip) {
+    tip.innerHTML = isStatic
+      ? '静态版没有服务端，上传结果只存在本机浏览器；要同步给别人，请点「导出 JSON」并把文件覆盖回仓库的 <code>data/courses.json</code>。'
+      : '上传前的版本会自动备份到 <code>data/backup/</code>，误传可从历史数据恢复。';
+  }
+}
+
+/* ============================ 统计 ============================ */
+
+function stats() {
+  const list = state.data.sessions;
+  const total = list.length;
+  const done = list.filter((s) => s.date && s.date < TODAY_ISO).length;
+  const todo = total - done;
+  const dated = list.filter((s) => s.date);
+  const dates = dated.map((s) => s.date).sort();
+  const commonList = list.filter((s) => COMMON.includes(s.track));
+  const commonDone = commonList.filter((s) => s.date && s.date < TODAY_ISO).length;
+  return {
+    total, done, todo,
+    dated: dated.length,
+    tbd: total - dated.length,
+    first: dates[0] || '',
+    last: dates[dates.length - 1] || '',
+    pct: total ? Math.round((done / total) * 100) : 0,
+    commonTotal: commonList.length,
+    commonDone,
+  };
+}
+
+function trackStats(key) {
+  const list = state.data.sessions.filter((s) => s.track === key);
+  const done = list.filter((s) => s.date && s.date < TODAY_ISO).length;
+  const tbd = list.filter((s) => !s.date).length;
+  const next = list
+    .filter((s) => s.date && s.date >= TODAY_ISO)
+    .sort((a, b) => (a.date + (a.start || '99')).localeCompare(b.date + (b.start || '99')))[0];
+  return { total: list.length, done, tbd, todo: list.length - done, next, pct: list.length ? Math.round((done / list.length) * 100) : 0 };
+}
+
+/** 三个方向（参与方向进度统计） */
+function presentTracks() {
+  const set = new Set(state.data.sessions.map((s) => s.track));
+  const order = TRACK_ORDER.filter((k) => set.has(k));
+  const extra = [...set].filter((k) => !TRACK_ORDER.includes(k) && !COMMON.includes(k) && TRACK_META[k]);
+  return [...order, ...extra];
+}
+
+/** 日历筛选 / 图例 / 编辑下拉：方向 + 公共课程 */
+function allTracks() {
+  const set = new Set(state.data.sessions.map((s) => s.track));
+  const list = presentTracks();
+  COMMON.forEach((k) => { if (set.has(k)) list.push(k); });
+  if (set.has('other')) list.push('other');
+  return list;
+}
+
+/* ============================ 渲染：总览 ============================ */
+
+function renderOverview() {
+  const st = stats();
+  $('#stat-total').textContent = st.total;
+  $('#stat-done').textContent = st.done;
+  $('#stat-todo').textContent = st.todo;
+  $('#stat-bar').style.width = st.pct + '%';
+
+  if (st.first && st.last) {
+    const a = parseISO(st.first), b = parseISO(st.last);
+    $('#cycle-pill').textContent = `${a.getFullYear()}.${String(a.getMonth() + 1).padStart(2, '0')} — ${b.getFullYear()}.${String(b.getMonth() + 1).padStart(2, '0')}`;
+    const dirTotal = st.total - st.commonTotal;
+    $('#stat-foot').innerHTML =
+      `<div>首课 ${fmtMD(st.first)} · 末课 ${fmtMD(st.last)} · 已完成 ${st.pct}%</div>` +
+      (st.commonTotal
+        ? `<div class="foot-note">公共课 ${st.commonTotal} 节不计入方向进度 · 四方向合计 ${dirTotal} 节${st.tbd ? `（含 ${st.tbd} 节待排期）` : ''}</div>`
+        : '');
+  }
+
+  const meta = state.data.meta || {};
+  const src = meta.source ? `数据来源：${meta.source}` : '数据来源：本地课程表';
+  const up = meta.updatedAt ? ` · 更新于 ${new Date(meta.updatedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : '';
+  $('#meta-line').textContent = `${meta.subtitle || '2026-2027学年度 · 产学研发展中心'}　|　${src}${up}`;
+
+  const wrap = $('#track-cards');
+  wrap.innerHTML = presentTracks().map((key) => {
+    const t = trackOf(key);
+    const s = trackStats(key);
+    let nextHtml;
+    if (s.next) {
+      nextHtml = `<div class="track-next"><span class="nx-date">${fmtMD(s.next.date)} ${s.next.start || ''}</span><b>${esc(s.next.title)}</b></div>`;
+    } else if (s.tbd) {
+      nextHtml = `<div class="track-next"><span class="nx-date">—</span><b>${s.tbd} 节待排期，日期未定</b></div>`;
+    } else {
+      nextHtml = `<div class="track-next"><span class="nx-date">—</span><b>课程已全部完成</b></div>`;
+    }
+    return `
+      <div class="track-card" style="--tc:${t.hex}">
+        <div class="track-head">
+          <div class="track-name">${esc(t.name)}</div>
+          <div class="track-sub">${esc(s.tbd ? `计划 ${s.total} 节 · ${s.tbd} 节待排期` : t.desc)}</div>
+        </div>
+        <div class="track-bar"><span style="width:${s.pct}%"></span></div>
+        <div class="track-nums">
+          <div class="track-meta">
+            <span>已上 <b>${s.done}</b> 节</span>
+            <span>待上 <b>${s.todo}</b> 节</span>
+          </div>
+          <div class="track-ratio"><b>${s.pct}</b>%</div>
+        </div>
+        ${nextHtml}
+      </div>`;
+  }).join('');
+}
+
+/* ============================ 渲染：筛选 ============================ */
+
+function renderFilters() {
+  const keys = allTracks();
+  const el = $('#filters');
+  if (keys.length <= 1) { el.innerHTML = ''; return; }
+  el.innerHTML =
+    `<button class="chip ${state.filter === 'all' ? 'on' : ''}" data-filter="all">全部</button>` +
+    keys.map((k) => {
+      const t = trackOf(k);
+      return `<button class="chip ${state.filter === k ? 'on' : ''}" data-filter="${k}" style="--cc:${t.hex}"><i class="cdot"></i>${esc(t.short)}</button>`;
+    }).join('');
+}
+
+/* ============================ 渲染：周视图 ============================ */
+
+function sessionsOn(dateStr) {
+  return state.data.sessions
+    .filter((s) => s.date === dateStr)
+    .filter((s) => state.filter === 'all' || s.track === state.filter)
+    .sort((a, b) => (a.start || '99').localeCompare(b.start || '99'));
+}
+
+function renderWeek() {
+  const ws = startOfWeek(state.cursor);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
+  const we = days[6];
+
+  const weekSessions = days.flatMap((d) => sessionsOn(iso(d)));
+  $('#view-title').innerHTML =
+    `<b>${ws.getFullYear()}年${ws.getMonth() + 1}月${ws.getDate()}日 — ${we.getMonth() + 1}月${we.getDate()}日</b>` +
+    `<span>本周 ${weekSessions.length} 节${state.filter !== 'all' ? '（已按方向筛选）' : ''}</span>`;
+
+  $('#panel-week').innerHTML = `<div class="week-grid">${days.map((d) => {
+    const key = iso(d);
+    const list = sessionsOn(key);
+    const isToday = sameDay(d, state.today);
+    return `
+      <div class="week-col ${isToday ? 'is-today' : ''}">
+        <div class="week-col-head">
+          <span class="dow">${DOW[d.getDay()]}</span>
+          <span class="dnum">${d.getDate()}</span>
+        </div>
+        <div class="week-col-body">
+          ${list.length ? list.map(sessionCard).join('') : '<div class="week-empty">—</div>'}
+        </div>
+      </div>`;
+  }).join('')}</div>`;
+}
+
+function sessionCard(s) {
+  const t = trackOf(s.track);
+  const past = s.date < TODAY_ISO;
+  return `
+    <div class="sess ${past ? 'is-past' : ''}" style="--tc:${t.hex}" data-edit="${esc(s.id)}" title="点击编辑「${esc(s.title)}」">
+      <div class="sess-time">${esc(timeText(s))}</div>
+      <div class="sess-title">${esc(s.title)}</div>
+      <div class="sess-teacher">${esc(s.teacher || '—')}${s.expected ? ' · ' + esc(s.expected) : ''}</div>
+    </div>`;
+}
+
+/* ============================ 渲染：月视图 ============================ */
+
+function renderMonth() {
+  const y = state.cursor.getFullYear();
+  const m = state.cursor.getMonth();
+  const first = new Date(y, m, 1);
+  const gridStart = startOfWeek(first);
+  const lastDate = new Date(y, m + 1, 0);
+  const rows = Math.ceil((((lastDate - gridStart) / 86400000) + 1) / 7);
+
+  let total = 0;
+  const cells = [];
+  for (let i = 0; i < rows * 7; i++) {
+    const d = addDays(gridStart, i);
+    const key = iso(d);
+    const list = sessionsOn(key);
+    if (d.getMonth() === m) total += list.length;
+    const dim = d.getMonth() !== m;
+    const isToday = sameDay(d, state.today);
+    const shown = list.slice(0, 3);
+    cells.push(`
+      <div class="month-cell ${dim ? 'dim' : ''} ${isToday ? 'is-today' : ''}">
+        <div class="mnum"><span>${d.getDate()}</span>${list.length > 1 ? `<span class="mn-count">${list.length} 节</span>` : ''}</div>
+        ${shown.map((s) => {
+          const t = trackOf(s.track);
+          return `<div class="mchip" style="--tc:${t.hex};--tc-soft:${t.soft}" data-edit="${esc(s.id)}" title="${esc(s.title)}｜${esc(timeText(s))}｜${esc(s.teacher || '')}">
+            ${s.start ? `<span class="mt">${s.start}</span>` : ''}${esc(s.title)}
+          </div>`;
+        }).join('')}
+        ${list.length > 3 ? `<div class="mmore" data-more="${key}">+${list.length - 3} 节</div>` : ''}
+      </div>`);
+  }
+
+  $('#view-title').innerHTML = `<b>${y}年${m + 1}月</b><span>本月 ${total} 节${state.filter !== 'all' ? '（已按方向筛选）' : ''}</span>`;
+  $('#panel-month').innerHTML = `
+    <div class="month-dow">${['一', '二', '三', '四', '五', '六', '日'].map((x) => `<div>周${x}</div>`).join('')}</div>
+    <div class="month-grid">${cells.join('')}</div>`;
+}
+
+/* ============================ 渲染：年视图 ============================ */
+
+function renderYear() {
+  const scope = state.data.sessions.filter((s) => state.filter === 'all' || s.track === state.filter);
+  const list = scope.filter((s) => s.date);          // 只有已排期的进月历
+  const tbdList = scope.filter((s) => !s.date);      // 待排期单独列在底部
+  const all = list.map((s) => s.date).sort();
+  if (!all.length) {
+    $('#panel-year').innerHTML = '<div style="padding:40px;text-align:center;color:#858b99">暂无已排期课程</div>';
+    return;
+  }
+  const first = parseISO(all[0]);
+  const last = parseISO(all[all.length - 1]);
+
+  const months = [];
+  let cur = new Date(first.getFullYear(), first.getMonth(), 1);
+  const end = new Date(last.getFullYear(), last.getMonth(), 1);
+  while (cur <= end) {
+    months.push(new Date(cur));
+    cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+  }
+
+  const byMonth = new Map();
+  list.forEach((s) => {
+    const d = parseISO(s.date);
+    const k = `${d.getFullYear()}-${d.getMonth()}`;
+    if (!byMonth.has(k)) byMonth.set(k, []);
+    byMonth.get(k).push(s);
+  });
+
+  const cards = months.map((mo) => {
+    const y = mo.getFullYear(), m = mo.getMonth();
+    const items = byMonth.get(`${y}-${m}`) || [];
+    const dayCount = new Map();
+    items.forEach((s) => dayCount.set(s.date, (dayCount.get(s.date) || 0) + 1));
+    const firstDow = (new Date(y, m, 1).getDay() + 6) % 7; // 周一=0
+    const days = new Date(y, m + 1, 0).getDate();
+
+    const cells = [];
+    for (let i = 0; i < firstDow; i++) cells.push('<div></div>');
+    for (let d = 1; d <= days; d++) {
+      const key = iso(new Date(y, m, d));
+      const n = dayCount.get(key) || 0;
+      const sess = items.find((s) => s.date === key);
+      const t = sess ? trackOf(sess.track) : null;
+      const isToday = key === TODAY_ISO;
+      cells.push(`<div class="ym-day ${n ? 'has' : ''} ${isToday ? 'today' : ''}" ${n ? `style="background:${t.hex}"` : ''} title="${m + 1}月${d}日${n ? ` · ${n} 节课` : ''}"></div>`);
+    }
+    return `
+      <div class="year-month" data-month="${y}-${m}">
+        <div class="ym-head">
+          <div class="ym-name">${m + 1}月<span>${y}</span></div>
+          <div class="ym-count">${items.length ? `<b>${items.length}</b> 节` : '—'}</div>
+        </div>
+        <div class="ym-days">${cells.join('')}</div>
+      </div>`;
+  });
+
+  const total = list.length;
+  $('#view-title').innerHTML = `<b>${first.getFullYear()}年${first.getMonth() + 1}月 — ${last.getFullYear()}年${last.getMonth() + 1}月</b><span>已排期 ${total} 节 · 覆盖 ${months.length} 个月${tbdList.length ? ` · 另有 ${tbdList.length} 节待排期` : ''}</span>`;
+
+  const legend = allTracks().map((k) => {
+    const t = trackOf(k);
+    return `<span><i style="background:${t.hex}"></i>${esc(t.name)}</span>`;
+  }).join('') + '<span style="margin-left:auto">点击月份可查看当月课表</span>';
+
+  const tbdByTrack = {};
+  tbdList.forEach((s) => { tbdByTrack[s.track] = (tbdByTrack[s.track] || 0) + 1; });
+  const tbdRow = tbdList.length
+    ? `<div class="tbd-row"><span class="tbd-label">待排期</span>${Object.entries(tbdByTrack).map(([k, n]) => {
+        const t = trackOf(k);
+        return `<span class="tbd-chip" style="--tc:${t.hex};--tc-soft:${t.soft}">${esc(t.name)}<b>×${n}</b></span>`;
+      }).join('')}<span class="tbd-hint">日期未定，排期后会在月历中出现</span></div>`
+    : '';
+
+  $('#panel-year').innerHTML = `<div class="year-grid">${cards.join('')}</div>${tbdRow}<div class="year-legend">${legend}</div>`;
+}
+
+/* ============================ 渲染：调度 ============================ */
+
+function renderAll() {
+  if (state.filter !== 'all' && !presentTracks().includes(state.filter)) state.filter = 'all';
+  renderOverview();
+  renderFilters();
+  renderView();
+  renderSourceBox();
+}
+
+function renderView() {
+  const nav = $('#nav-group');
+  nav.hidden = state.view === 'year';
+  $('#panel-week').hidden = state.view !== 'week';
+  $('#panel-month').hidden = state.view !== 'month';
+  $('#panel-year').hidden = state.view !== 'year';
+  $$('#segmented button').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
+  if (state.view === 'week') renderWeek();
+  else if (state.view === 'month') renderMonth();
+  else renderYear();
+}
+
+/* ============================ 交互：视图导航 ============================ */
+
+$('#segmented').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  state.view = b.dataset.view;
+  history.replaceState(null, '', '#' + state.view);
+  renderView();
+});
+
+// 支持 #week / #month / #year 直达
+function applyHash() {
+  const h = (location.hash || '').replace('#', '');
+  if (['week', 'month', 'year'].includes(h)) state.view = h;
+}
+
+$('#nav-prev').addEventListener('click', () => shift(-1));
+$('#nav-next').addEventListener('click', () => shift(1));
+$('#nav-today').addEventListener('click', () => {
+  state.cursor = startOfDay(new Date());
+  renderView();
+});
+
+function shift(dir) {
+  if (state.view === 'week') state.cursor = addDays(state.cursor, dir * 7);
+  else if (state.view === 'month') state.cursor = new Date(state.cursor.getFullYear(), state.cursor.getMonth() + dir, 1);
+  renderView();
+}
+
+$('#filters').addEventListener('click', (e) => {
+  const b = e.target.closest('.chip');
+  if (!b) return;
+  state.filter = b.dataset.filter;
+  renderFilters();
+  renderView();
+});
+
+// 年视图：点击月份进入月视图
+$('#panel-year').addEventListener('click', (e) => {
+  const mo = e.target.closest('.year-month');
+  if (!mo) return;
+  const [y, m] = mo.dataset.month.split('-').map(Number);
+  state.cursor = new Date(y, m, 1);
+  state.view = 'month';
+  renderView();
+});
+
+// 点击课程 → 打开编辑
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-edit]');
+  if (el) {
+    openEdit(el.dataset.edit);
+    return;
+  }
+  const more = e.target.closest('[data-more]');
+  if (more) {
+    state.cursor = parseISO(more.dataset.more);
+    state.view = 'week';
+    renderView();
+  }
+});
+
+/* ============================ 弹窗通用 ============================ */
+
+function openModal(id) {
+  $(id).hidden = false;
+  document.body.style.overflow = 'hidden';
+}
+function closeModal(id) {
+  $(id).hidden = true;
+  document.body.style.overflow = '';
+}
+$$('[data-close]').forEach((el) => el.addEventListener('click', () => {
+  const modal = el.closest('.modal');
+  if (modal) closeModal('#' + modal.id);
+}));
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') $$('.modal').forEach((m) => { if (!m.hidden) closeModal('#' + m.id); });
+});
+
+let toastTimer = null;
+function toast(msg) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (el.hidden = true), 2600);
+}
+
+/* ============================ 编辑课程 ============================ */
+
+$('#btn-edit').addEventListener('click', () => openEdit(null));
+
+function openEdit(focusId) {
+  state.editing = state.data.sessions.map((s) => ({ ...s }));
+  renderEditTable();
+  openModal('#modal-edit');
+  if (focusId) {
+    requestAnimationFrame(() => {
+      const row = $(`#edit-body tr[data-id="${CSS.escape(focusId)}"]`);
+      if (row) {
+        row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        row.style.transition = 'background .3s';
+        $$('td', row).forEach((td) => (td.style.background = '#fff8e1'));
+        setTimeout(() => $$('td', row).forEach((td) => (td.style.background = '')), 1600);
+      }
+    });
+  }
+}
+
+function trackOptions(sel) {
+  const keys = Array.from(new Set([...TRACK_ORDER, ...allTracks(), 'other']));
+  return keys.map((k) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(TRACK_META[k].name)}</option>`).join('');
+}
+
+function renderEditTable() {
+  const body = $('#edit-body');
+  body.innerHTML = state.editing.map((s) => `
+    <tr data-id="${esc(s.id)}" class="${s.__new ? 'is-new' : ''}${s.date ? '' : ' is-tbd'}">
+      <td><input type="date" data-f="date" value="${esc(s.date)}" /></td>
+      <td><input type="time" data-f="start" value="${esc(s.start)}" /></td>
+      <td><input type="time" data-f="end" value="${esc(s.end)}" /></td>
+      <td><input type="text" data-f="title" value="${esc(s.title)}" placeholder="课程名称" /></td>
+      <td><input type="text" data-f="teacher" value="${esc(s.teacher)}" placeholder="授课教师" /></td>
+      <td><input type="text" data-f="expected" value="${esc(s.expected)}" placeholder="人数" /></td>
+      <td><select data-f="track">${trackOptions(s.track)}</select></td>
+      <td><button class="row-del" data-del="${esc(s.id)}" title="删除这节课">✕</button></td>
+    </tr>`).join('');
+  $('#edit-count').textContent = `共 ${state.editing.length} 节`;
+}
+
+$('#edit-body').addEventListener('input', (e) => {
+  const el = e.target;
+  const f = el.dataset.f;
+  if (!f) return;
+  const tr = el.closest('tr');
+  const item = state.editing.find((s) => s.id === tr.dataset.id);
+  if (!item) return;
+  item[f] = el.value;
+});
+$('#edit-body').addEventListener('change', (e) => {
+  const el = e.target;
+  if (el.dataset.f === 'track') {
+    const tr = el.closest('tr');
+    const item = state.editing.find((s) => s.id === tr.dataset.id);
+    if (item) item.track = el.value;
+  }
+});
+
+$('#edit-body').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-del]');
+  if (!btn) return;
+  const id = btn.dataset.del;
+  state.editing = state.editing.filter((s) => s.id !== id);
+  renderEditTable();
+});
+
+$('#btn-add-row').addEventListener('click', () => {
+  const id = 'new-' + Date.now().toString(36);
+  state.editing.push({
+    id,
+    date: TODAY_ISO,
+    start: '',
+    end: '',
+    title: '',
+    teacher: '',
+    expected: '',
+    track: presentTracks()[0] || 'ip',
+    kind: 'lesson',
+    __new: true,
+  });
+  renderEditTable();
+  const row = $(`#edit-body tr[data-id="${id}"]`);
+  if (row) {
+    row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    $('input[data-f="title"]', row).focus();
+  }
+});
+
+$('#btn-save').addEventListener('click', async () => {
+  const clean = state.editing
+    .filter((s) => s.title.trim())
+    .map((s) => ({
+      id: s.id.startsWith('new-') ? 's' + Math.random().toString(36).slice(2, 7) : s.id,
+      date: s.date || '',
+      start: s.start || '',
+      end: s.end || '',
+      title: s.title.trim(),
+      teacher: (s.teacher || '').trim(),
+      expected: (s.expected || '').trim(),
+      track: s.track,
+      kind: s.kind || 'lesson',
+    }))
+    .sort((a, b) => {
+      if (!a.date && b.date) return 1;          // 待排期的排到最后
+      if (a.date && !b.date) return -1;
+      if (!a.date && !b.date) return 0;
+      return a.date === b.date ? (a.start || '99').localeCompare(b.start || '99') : a.date.localeCompare(b.date);
+    });
+
+  if (!clean.length) { toast('至少需要保留一节课'); return; }
+
+  const dropped = state.editing.length - clean.length;
+  try {
+    const saved = await persistSessions(clean);
+    state.data.sessions = clean;
+    state.data.meta.total = clean.length;
+    state.data.meta.updatedAt = new Date().toISOString();
+    if (saved.mode === 'static') state.data.meta.localDraft = true;
+    closeModal('#modal-edit');
+    applyModeUI();
+    renderAll();
+    toast(
+      `已保存 ${clean.length} 节课${dropped ? `（忽略了 ${dropped} 条没有课名的空行）` : ''}` +
+        (saved.mode === 'static' ? ' · 存在本机浏览器' : '')
+    );
+  } catch (err) {
+    toast('保存失败：' + err.message);
+  }
+});
+
+/** 保存课程：本地服务写文件，静态版写 localStorage 草稿 */
+async function persistSessions(list) {
+  const payload = { ...state.data, sessions: list, meta: { ...(state.data.meta || {}), total: list.length } };
+  if (RUNTIME.mode === 'server') {
+    const res = await fetch('api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const out = await res.json();
+    if (!res.ok || !out.ok) throw new Error(out.error || '保存失败');
+    return { mode: 'server' };
+  }
+  localStorage.setItem(RUNTIME.draftKey, JSON.stringify(payload));
+  return { mode: 'static' };
+}
+
+function downloadJSON() {
+  const blob = new Blob([JSON.stringify(state.data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'courses.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+$('#btn-export').addEventListener('click', () => {
+  if (RUNTIME.mode === 'server') window.location.href = 'api/export';
+  else downloadJSON();
+});
+
+/* ============================ 上传课程表 ============================ */
+
+$('#btn-upload').addEventListener('click', () => {
+  $('#upload-status').hidden = true;
+  openModal('#modal-upload');
+  renderSourceBox();
+});
+
+function renderSourceBox() {
+  const meta = state.data.meta || {};
+  const box = $('#source-box');
+  if (!box) return;
+  box.innerHTML = `
+    <div>当前数据来源：<b>${esc(meta.source || 'courses.json')}</b>${meta.localDraft ? ' <span style="color:#8a6d3b">（含本机浏览器改动）</span>' : ''}</div>
+    <div>课程总数：<b>${state.data.sessions.length}</b> 节${meta.updatedAt ? ` · 更新于 <b>${new Date(meta.updatedAt).toLocaleString('zh-CN')}</b>` : ''}</div>`;
+}
+
+const dropzone = $('#dropzone');
+const fileInput = $('#file-input');
+
+['dragenter', 'dragover'].forEach((ev) =>
+  dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.add('drag'); })
+);
+['dragleave', 'drop'].forEach((ev) =>
+  dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.remove('drag'); })
+);
+dropzone.addEventListener('drop', (e) => {
+  const f = e.dataTransfer.files[0];
+  if (f) uploadFile(f);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) uploadFile(fileInput.files[0]);
+});
+
+async function uploadFile(file) {
+  const allowed = ['.docx', '.csv', '.json', '.txt'];
+  const ext = '.' + file.name.split('.').pop().toLowerCase();
+  const status = $('#upload-status');
+  status.hidden = false;
+  if (!allowed.includes(ext)) {
+    status.className = 'upload-status err';
+    status.textContent = `不支持 ${ext} 格式，请上传 .docx（推荐）、.csv 或 .json。`;
+    return;
+  }
+  status.className = 'upload-status loading';
+  status.textContent = `正在读取「${file.name}」…`;
+
+  try {
+    const buf = await file.arrayBuffer();
+    let out;
+
+    if (RUNTIME.mode === 'server') {
+      const res = await fetch(`api/upload?filename=${encodeURIComponent(file.name)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: buf,
+      });
+      out = await res.json();
+      if (!res.ok || !out.ok) throw new Error(out.error || '解析失败');
+      await loadData();
+    } else {
+      // 静态版：在浏览器里直接解析
+      if (ext === '.json') {
+        const parsed = JSON.parse(new TextDecoder().decode(buf));
+        if (!parsed || !Array.isArray(parsed.sessions)) throw new Error('JSON 里没有 sessions 数组');
+        out = { total: parsed.sessions.length, source: file.name, sessions: parsed.sessions, meta: parsed.meta };
+      } else if (ext === '.docx') {
+        if (!window.parseCourseDocx) throw new Error('解析器未加载');
+        const parsed = await window.parseCourseDocx(buf, file.name);
+        out = { total: parsed.sessions.length, source: file.name, sessions: parsed.sessions, meta: parsed.meta };
+      } else {
+        throw new Error('静态版目前只能解析 .docx 和 .json');
+      }
+      state.data = {
+        meta: { ...(state.data.meta || {}), ...(out.meta || {}), source: out.source, updatedAt: new Date().toISOString(), localDraft: true },
+        sessions: out.sessions,
+      };
+      await persistSessions(out.sessions);
+      applyModeUI();
+      renderAll();
+    }
+
+    status.className = 'upload-status';
+    status.textContent = `✓ 已读取「${out.source}」，共识别 ${out.total} 节课，看板已同步更新。` +
+      (RUNTIME.mode === 'static' ? '（保存在本机浏览器）' : '');
+    renderSourceBox();
+    toast(`课程表已更新，共 ${out.total} 节课`);
+    fileInput.value = '';
+    setTimeout(() => closeModal('#modal-upload'), 1400);
+  } catch (err) {
+    status.className = 'upload-status err';
+    status.textContent = `解析失败：${err.message}\n请确认文档中包含“时间 / 培训项目名称 / 授课教师 / 参与学生人数”四列的表格。`;
+  }
+}
+
+/* ============================ 启动 ============================ */
+
+applyHash();
+loadData().then(() => {
+  const m = new URLSearchParams(location.search).get('modal');
+  if (m === 'edit') openEdit(null);
+  if (m === 'upload') { $('#upload-status').hidden = true; openModal('#modal-upload'); renderSourceBox(); }
+});
