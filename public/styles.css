@@ -532,6 +532,8 @@ main { max-width: 1800px; margin: 0 auto; padding: 20px var(--pad) 56px; }
   overflow: hidden;
 }
 .modal-panel.narrow { width: min(560px, 100%); }
+/* 编辑课程：列多、课程名长，单独放宽 */
+.modal-panel.wide { width: min(1260px, 100%); }
 @keyframes fade { from { opacity: 0; } }
 @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.985); } }
 

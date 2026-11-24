@@ -68,6 +68,20 @@ function timeText(s) {
   return '时间待定';
 }
 
+/* 圈标序号 → 「第一节」，与课名之间留一个空格（解析器已处理，这里兜住旧数据） */
+const CN_NUM = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十',
+  '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十'];
+function normalizeTitle(raw) {
+  let t = String(raw == null ? '' : raw);
+  t = t.replace(/[\u2460-\u2473\u3251-\u325F]/g, (ch) => {
+    const code = ch.codePointAt(0);
+    const n = code <= 0x2473 ? code - 0x2460 + 1 : code - 0x3251 + 21;
+    return '第' + (CN_NUM[n] || String(n)) + '节';
+  });
+  t = t.replace(/(\S)\s*(第[一二三四五六七八九十]+节)/g, '$1 $2');
+  return t.replace(/\s{2,}/g, ' ').trim();
+}
+
 /* ============================ 状态 ============================ */
 
 const state = {
@@ -198,7 +212,7 @@ async function loadData() {
     date: s.date,
     start: s.start || '',
     end: s.end || '',
-    title: s.title || '',
+    title: normalizeTitle(s.title || ''),
     teacher: s.teacher || '',
     expected: s.expected || '',
     track: TRACK_META[s.track] ? s.track : 'other',
@@ -977,7 +991,7 @@ async function uploadFile(file) {
       }
       state.data = {
         meta: { ...(state.data.meta || {}), ...(out.meta || {}), source: out.source, updatedAt: new Date().toISOString(), localDraft: true },
-        sessions: out.sessions,
+        sessions: out.sessions.map((s) => ({ ...s, title: normalizeTitle(s.title || '') })),
       };
       saved = await persistSessions(out.sessions);
       applyModeUI();

@@ -69,6 +69,20 @@
     return 'lesson';
   }
 
+  /* 圈标序号 → 「第一节」，与课名之间留一个空格（与 lib/parse-docx.js 保持一致） */
+  var CN_NUM = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十',
+    '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十'];
+  function normalizeTitle(raw) {
+    var t = String(raw == null ? '' : raw);
+    t = t.replace(/[\u2460-\u2473\u3251-\u325F]/g, function (ch) {
+      var code = ch.codePointAt(0);
+      var n = code <= 0x2473 ? code - 0x2460 + 1 : code - 0x3251 + 21;
+      return '第' + (CN_NUM[n] || String(n)) + '节';
+    });
+    t = t.replace(/(\S)\s*(第[一二三四五六七八九十]+节)/g, '$1 $2');
+    return t.replace(/\s{2,}/g, ' ').trim();
+  }
+
   function cellText(tc) {
     const paras = [];
     const ps = tc.getElementsByTagName('w:p');
@@ -123,7 +137,7 @@
 
         let rest = cells.slice(1).filter((x) => x !== '');
         if (rest.length >= 4 && /^\d{1,2}$/.test(rest[0])) rest = rest.slice(1);
-        const title = (rest[0] || '').trim();
+        const title = normalizeTitle((rest[0] || '').trim());
         const teacher = (rest[1] || '').trim();
         const expected = (rest[2] || '').trim();
         if (!title) continue;
