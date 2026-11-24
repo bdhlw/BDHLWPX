@@ -364,6 +364,8 @@ main { max-width: 1800px; margin: 0 auto; padding: 20px var(--pad) 56px; }
   background: var(--navy); color: #fff;
   width: 24px; height: 24px; border-radius: 8px;
   display: grid; place-items: center; font-size: 13px;
+  /* 24 + 2 + 3 = 29，与其它列 19px 数字的行高一致，否则今天这一列的表头会矮 5px */
+  margin: 2px 0 3px;
 }
 .week-col-body { padding: 8px; display: flex; flex-direction: column; gap: 7px; flex: 1; }
 .week-empty { color: #c4c8d1; font-size: 12px; text-align: center; padding: 18px 0; }
