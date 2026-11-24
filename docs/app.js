@@ -79,7 +79,8 @@ const state = {
   editing: [],
 };
 
-const TODAY_ISO = iso(state.today);
+/* 「已上 / 待上」的分界线：按本机日期算，跨到第二天就自动往前挪一档 */
+let TODAY_ISO = iso(state.today);
 
 /* ============================ 数据加载 ============================ */
 
@@ -1003,6 +1004,28 @@ async function uploadFile(file) {
   }
 }
 
+/* ============================ 日期翻页 ============================ */
+
+/** 视图是否还停在「旧今天」所在的周 / 月 / 年（没被用户翻走） */
+function viewingCurrentPeriod(oldToday) {
+  if (state.view === 'week') return iso(startOfWeek(state.cursor)) === iso(startOfWeek(oldToday));
+  if (state.view === 'month') return iso(state.cursor).slice(0, 7) === iso(oldToday).slice(0, 7);
+  return state.cursor.getFullYear() === oldToday.getFullYear();
+}
+
+/** 日期跨天后重算进度；页面一直开着也会自己往前走 */
+function refreshToday() {
+  const nowIso = iso(new Date());
+  if (nowIso === TODAY_ISO) return false;
+  const oldToday = state.today;
+  const follow = viewingCurrentPeriod(oldToday);
+  TODAY_ISO = nowIso;
+  state.today = startOfDay(new Date());
+  if (follow) state.cursor = startOfDay(new Date());
+  renderAll();
+  return true;
+}
+
 /* ============================ 启动 ============================ */
 
 applyHash();
@@ -1010,4 +1033,9 @@ loadData().then(() => {
   const m = new URLSearchParams(location.search).get('modal');
   if (m === 'edit') openEdit(null);
   if (m === 'upload') { $('#upload-status').hidden = true; openModal('#modal-upload'); renderSourceBox(); }
+
+  // 跨零点：每分钟对一次日期（含电脑休眠醒来、标签页切回）
+  setInterval(refreshToday, 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshToday(); });
+  window.addEventListener('focus', refreshToday);
 });
