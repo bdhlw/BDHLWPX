@@ -115,6 +115,12 @@ button { font-family: inherit; cursor: pointer; }
 }
 .mode-badge.static { color: #8a6d3b; background: #fdf8ef; border-color: #f0e2c8; }
 .mode-badge.server { color: var(--meal); background: var(--meal-soft); border-color: #cbe9db; }
+.mode-badge.readonly { color: var(--muted); background: var(--surface-2); border-color: var(--line); }
+
+/* 只读：课程卡与月历标签不再表现为可点 */
+.is-readonly .sess, .is-readonly .mchip { cursor: default; }
+.is-readonly .sess:hover { box-shadow: none; transform: none; }
+.is-readonly .mchip:hover { filter: none; }
 
 .btn {
   display: inline-flex;
@@ -144,6 +150,7 @@ button { font-family: inherit; cursor: pointer; }
 .btn.ghost:hover { background: var(--surface-2); border-color: #c3c8d2; color: var(--text); }
 .btn.small { height: 30px; padding: 0 10px; font-size: 12.5px; }
 .btn[disabled] { opacity: .5; pointer-events: none; }
+.btn[hidden] { display: none !important; }
 
 /* ---------------- 主体 ---------------- */
 main { max-width: 1800px; margin: 0 auto; padding: 20px var(--pad) 56px; }

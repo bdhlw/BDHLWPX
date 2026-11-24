@@ -36,6 +36,11 @@ let html = fs.readFileSync(indexPath, 'utf8');
 ASSETS.forEach((f) => {
   html = html.split(`./${f}"`).join(`./${f}?v=${v}"`);
 });
+// 静态发布版标记为只读：隐藏上传/编辑入口（本地服务版不受影响）
+html = html.replace(
+  '<script src="./docx-client.js',
+  '<script>window.__BUILD__={readonly:true,builtAt:"' + new Date().toISOString() + '"};</script>\n<script src="./docx-client.js'
+);
 fs.writeFileSync(indexPath, html);
 
 const d = JSON.parse(fs.readFileSync(DATA, 'utf8'));

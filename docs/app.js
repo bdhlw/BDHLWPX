@@ -86,6 +86,11 @@ const TODAY_ISO = iso(state.today);
 /* 运行模式：server = 本地 Node 服务（可写文件）；static = GitHub Pages / 纯静态 */
 const RUNTIME = { mode: 'static', draftKey: 'course-board:draft:v1' };
 
+/* 只读判定：发布到 GitHub Pages 的版本默认只读（隐藏上传/编辑入口）
+ * 维护者可在网址后加 ?edit=1 临时打开入口做预览（改动仍只存在本机浏览器） */
+const EDIT_PARAM = new URLSearchParams(location.search).get('edit') === '1';
+const READONLY = !!(window.__BUILD__ && window.__BUILD__.readonly) && !EDIT_PARAM;
+
 async function fetchData() {
   // 1) 有本地服务时优先走服务端
   try {
@@ -102,16 +107,17 @@ async function fetchData() {
   const res = await fetch('data/courses.json', { cache: 'no-store' });
   if (!res.ok) throw new Error('读不到 data/courses.json');
   const d = await res.json();
-  try {
-    const raw = localStorage.getItem(RUNTIME.draftKey);
-    if (raw) {
-      const draft = JSON.parse(raw);
+  // 只读模式下不叠加本机草稿，保证所有访客看到同一份数据
+  if (!READONLY) {
+    try {
+      const raw = localStorage.getItem(RUNTIME.draftKey);
+      const draft = raw ? JSON.parse(raw) : null;
       if (draft && Array.isArray(draft.sessions) && draft.sessions.length) {
         d.sessions = draft.sessions;
         d.meta = { ...(d.meta || {}), ...(draft.meta || {}), localDraft: true };
       }
-    }
-  } catch (_) { /* 草稿损坏就忽略 */ }
+    } catch (_) { /* 草稿损坏就忽略 */ }
+  }
   return d;
 }
 
@@ -142,12 +148,24 @@ function applyModeUI() {
   const isStatic = RUNTIME.mode === 'static';
   const badge = $('#mode-badge');
   if (badge) {
-    badge.textContent = isStatic ? '静态版 · 改动存本机' : '本地服务版';
-    badge.className = 'mode-badge ' + (isStatic ? 'static' : 'server');
-    badge.title = isStatic
-      ? '这是 GitHub Pages 静态版：编辑与上传的结果保存在当前浏览器，可「导出 JSON」覆盖仓库里的 data/courses.json 让所有人看到。'
-      : '本地 Node 服务版：编辑与上传会直接写入 data/courses.json，并自动备份。';
+    if (READONLY) {
+      badge.textContent = '只读看板';
+      badge.className = 'mode-badge readonly';
+      badge.title = '课程内容由维护者更新；如需临时编辑，在网址后加 ?edit=1。';
+    } else {
+      badge.textContent = isStatic ? '静态版 · 改动存本机' : '本地服务版';
+      badge.className = 'mode-badge ' + (isStatic ? 'static' : 'server');
+      badge.title = isStatic
+        ? '这是 GitHub Pages 静态版：编辑与上传的结果保存在当前浏览器，可「导出 JSON」覆盖仓库里的 data/courses.json 让所有人看到。'
+        : '本地 Node 服务版：编辑与上传会直接写入 data/courses.json，并自动备份。';
+    }
   }
+  // 只读：藏起维护入口
+  document.body.classList.toggle('is-readonly', READONLY);
+  ['#btn-edit', '#btn-upload'].forEach((sel) => {
+    const el = $(sel);
+    if (el) el.hidden = READONLY;
+  });
   const hint = $('#edit-hint');
   if (hint) {
     hint.textContent = isStatic
@@ -564,6 +582,7 @@ function toast(msg) {
 $('#btn-edit').addEventListener('click', () => openEdit(null));
 
 function openEdit(focusId) {
+  if (READONLY) return;
   state.editing = state.data.sessions.map((s) => ({ ...s }));
   renderEditTable();
   openModal('#modal-edit');
@@ -727,6 +746,7 @@ $('#btn-export').addEventListener('click', () => {
 /* ============================ 上传课程表 ============================ */
 
 $('#btn-upload').addEventListener('click', () => {
+  if (READONLY) return;
   $('#upload-status').hidden = true;
   openModal('#modal-upload');
   renderSourceBox();
