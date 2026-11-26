@@ -16,8 +16,7 @@
       "teacher": "王子健",
       "expected": "30人",
       "track": "common",
-      "kind": "trial",
-      "weekdayHint": 2
+      "kind": "trial"
     },
     {
       "id": "s002",
@@ -28,8 +27,7 @@
       "teacher": "王子健",
       "expected": "32人",
       "track": "common",
-      "kind": "trial",
-      "weekdayHint": 3
+      "kind": "trial"
     },
     {
       "id": "s003",
@@ -40,8 +38,7 @@
       "teacher": "-",
       "expected": "1000人",
       "track": "common",
-      "kind": "public",
-      "weekdayHint": 4
+      "kind": "public"
     },
     {
       "id": "s004",
@@ -52,8 +49,7 @@
       "teacher": "周杰、郭楷、王子健",
       "expected": "90人",
       "track": "common",
-      "kind": "public",
-      "weekdayHint": 3
+      "kind": "public"
     },
     {
       "id": "s005",
@@ -64,8 +60,7 @@
       "teacher": "周杰、郭楷",
       "expected": "22人",
       "track": "meal",
-      "kind": "lesson",
-      "weekdayHint": 2
+      "kind": "lesson"
     },
     {
       "id": "s006",
@@ -76,8 +71,7 @@
       "teacher": "王子健",
       "expected": "9人",
       "track": "workshop",
-      "kind": "milestone",
-      "weekdayHint": 4
+      "kind": "milestone"
     },
     {
       "id": "s007",
@@ -88,8 +82,7 @@
       "teacher": "周杰、郭楷",
       "expected": "22人",
       "track": "meal",
-      "kind": "lesson",
-      "weekdayHint": 4
+      "kind": "lesson"
     },
     {
       "id": "s008",
@@ -100,8 +93,7 @@
       "teacher": "周杰、郭楷",
       "expected": "22人",
       "track": "meal",
-      "kind": "lesson",
-      "weekdayHint": 2
+      "kind": "lesson"
     },
     {
       "id": "s009",
@@ -112,8 +104,7 @@
       "teacher": "王子健",
       "expected": "30人",
       "track": "ip",
-      "kind": "lesson",
-      "weekdayHint": 2
+      "kind": "lesson"
     },
     {
       "id": "s010",
@@ -124,8 +115,7 @@
       "teacher": "周杰、郭楷",
       "expected": "22人",
       "track": "meal",
-      "kind": "lesson",
-      "weekdayHint": 4
+      "kind": "lesson"
     },
     {
       "id": "s011",
@@ -136,8 +126,7 @@
       "teacher": "周杰、郭楷",
       "expected": "22人",
       "track": "meal",
-      "kind": "lesson",
-      "weekdayHint": 2
+      "kind": "lesson"
     },
     {
       "id": "s012",
@@ -159,20 +148,7 @@
       "teacher": "周杰、郭楷",
       "expected": "22人",
       "track": "meal",
-      "kind": "lesson",
-      "weekdayHint": 2
-    },
-    {
-      "id": "s015",
-      "date": "2026-12-01",
-      "start": "",
-      "end": "",
-      "title": "“自媒体IP”培训 第二节",
-      "teacher": "王子健",
-      "expected": "30人",
-      "track": "ip",
-      "kind": "lesson",
-      "weekdayHint": 2
+      "kind": "lesson"
     },
     {
       "id": "s016",
@@ -183,20 +159,7 @@
       "teacher": "周杰、郭楷",
       "expected": "22人",
       "track": "meal",
-      "kind": "lesson",
-      "weekdayHint": 4
-    },
-    {
-      "id": "s017",
-      "date": "2026-12-03",
-      "start": "",
-      "end": "",
-      "title": "“邦德自媒体骨干工作坊” 第二节",
-      "teacher": "王子健",
-      "expected": "9人",
-      "track": "workshop",
-      "kind": "lesson",
-      "weekdayHint": 4
+      "kind": "lesson"
     },
     {
       "id": "s018",
@@ -207,20 +170,18 @@
       "teacher": "周杰、郭楷",
       "expected": "22人",
       "track": "meal",
-      "kind": "lesson",
-      "weekdayHint": 2
+      "kind": "lesson"
     },
     {
-      "id": "s019",
-      "date": "2026-12-08",
+      "id": "s015",
+      "date": "2026-12-09",
       "start": "",
       "end": "",
-      "title": "“自媒体IP”培训 第三节",
+      "title": "“自媒体IP”培训 第二节",
       "teacher": "王子健",
       "expected": "30人",
       "track": "ip",
-      "kind": "lesson",
-      "weekdayHint": 2
+      "kind": "lesson"
     },
     {
       "id": "s020",
@@ -231,8 +192,18 @@
       "teacher": "周杰、郭楷",
       "expected": "22人",
       "track": "meal",
-      "kind": "lesson",
-      "weekdayHint": 4
+      "kind": "lesson"
+    },
+    {
+      "id": "s017",
+      "date": "2026-12-10",
+      "start": "",
+      "end": "",
+      "title": "“邦德自媒体骨干工作坊” 第二节",
+      "teacher": "王子健",
+      "expected": "9人",
+      "track": "workshop",
+      "kind": "lesson"
     },
     {
       "id": "s021",
@@ -243,8 +214,18 @@
       "teacher": "周杰、郭楷",
       "expected": "22人",
       "track": "meal",
-      "kind": "lesson",
-      "weekdayHint": 2
+      "kind": "lesson"
+    },
+    {
+      "id": "s019",
+      "date": "2026-12-16",
+      "start": "",
+      "end": "",
+      "title": "“自媒体IP”培训 第三节",
+      "teacher": "王子健",
+      "expected": "30人",
+      "track": "ip",
+      "kind": "lesson"
     },
     {
       "id": "s022",
@@ -255,8 +236,7 @@
       "teacher": "周杰、郭楷",
       "expected": "22人",
       "track": "meal",
-      "kind": "lesson",
-      "weekdayHint": 4
+      "kind": "lesson"
     },
     {
       "id": "s023",
@@ -267,20 +247,18 @@
       "teacher": "周杰、郭楷",
       "expected": "22人",
       "track": "meal",
-      "kind": "lesson",
-      "weekdayHint": 2
+      "kind": "lesson"
     },
     {
       "id": "s024",
-      "date": "2026-12-22",
+      "date": "2026-12-23",
       "start": "",
       "end": "",
       "title": "“自媒体IP”培训 第四节",
       "teacher": "王子健",
       "expected": "30人",
       "track": "ip",
-      "kind": "lesson",
-      "weekdayHint": 2
+      "kind": "lesson"
     },
     {
       "id": "s025",
@@ -291,8 +269,7 @@
       "teacher": "周杰、郭楷",
       "expected": "22人",
       "track": "meal",
-      "kind": "lesson",
-      "weekdayHint": 4
+      "kind": "lesson"
     },
     {
       "id": "s026",
@@ -303,8 +280,7 @@
       "teacher": "王子健",
       "expected": "30人",
       "track": "ip",
-      "kind": "lesson",
-      "weekdayHint": 2
+      "kind": "lesson"
     },
     {
       "id": "s027",
@@ -315,8 +291,7 @@
       "teacher": "王子健",
       "expected": "9人",
       "track": "workshop",
-      "kind": "lesson",
-      "weekdayHint": 4
+      "kind": "lesson"
     },
     {
       "id": "s028",
@@ -327,8 +302,7 @@
       "teacher": "王子健",
       "expected": "30人",
       "track": "ip",
-      "kind": "lesson",
-      "weekdayHint": 2
+      "kind": "lesson"
     },
     {
       "id": "s029",
@@ -339,8 +313,7 @@
       "teacher": "王子健",
       "expected": "9人",
       "track": "workshop",
-      "kind": "lesson",
-      "weekdayHint": 4
+      "kind": "lesson"
     },
     {
       "id": "s030",
@@ -351,8 +324,7 @@
       "teacher": "王子健",
       "expected": "视招生情况而定",
       "track": "ip",
-      "kind": "milestone",
-      "weekdayHint": 2
+      "kind": "milestone"
     },
     {
       "id": "s031",
@@ -363,8 +335,7 @@
       "teacher": "王子健",
       "expected": "9人",
       "track": "workshop",
-      "kind": "lesson",
-      "weekdayHint": 4
+      "kind": "lesson"
     },
     {
       "id": "s032",
@@ -375,8 +346,7 @@
       "teacher": "王子健",
       "expected": "9人",
       "track": "workshop",
-      "kind": "milestone",
-      "weekdayHint": 4
+      "kind": "milestone"
     },
     {
       "id": "s033",
@@ -387,8 +357,7 @@
       "teacher": "",
       "expected": "",
       "track": "live",
-      "kind": "lesson",
-      "tbd": true
+      "kind": "lesson"
     },
     {
       "id": "s034",
@@ -399,8 +368,7 @@
       "teacher": "",
       "expected": "",
       "track": "live",
-      "kind": "lesson",
-      "tbd": true
+      "kind": "lesson"
     },
     {
       "id": "s035",
@@ -411,8 +379,7 @@
       "teacher": "",
       "expected": "",
       "track": "live",
-      "kind": "lesson",
-      "tbd": true
+      "kind": "lesson"
     },
     {
       "id": "s036",
@@ -423,8 +390,7 @@
       "teacher": "",
       "expected": "",
       "track": "live",
-      "kind": "lesson",
-      "tbd": true
+      "kind": "lesson"
     },
     {
       "id": "s037",
@@ -435,8 +401,7 @@
       "teacher": "",
       "expected": "",
       "track": "live",
-      "kind": "lesson",
-      "tbd": true
+      "kind": "lesson"
     },
     {
       "id": "s038",
@@ -447,8 +412,7 @@
       "teacher": "",
       "expected": "",
       "track": "live",
-      "kind": "lesson",
-      "tbd": true
+      "kind": "lesson"
     },
     {
       "id": "s039",
@@ -459,8 +423,7 @@
       "teacher": "",
       "expected": "",
       "track": "live",
-      "kind": "lesson",
-      "tbd": true
+      "kind": "lesson"
     }
   ]
 }
