@@ -21,6 +21,11 @@
   </div>
   <div class="topbar-actions">
     <span class="mode-badge" id="mode-badge"></span>
+    <button class="btn ghost" id="btn-push" hidden title="把本地已保存的课程表提交到 GitHub，约 1 分钟后线上生效">
+      <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v11m0 0l-4-4m4 4l4-4"/><path d="M4 16h12"/></svg>
+      <span class="lbl">推送上线</span>
+      <i class="push-dot" id="push-dot" hidden></i>
+    </button>
     <button class="btn ghost" id="btn-upload">
       <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14V3m0 0L6 7m4-4l4 4"/><path d="M3 13v3a2 2 0 002 2h10a2 2 0 002-2v-3"/></svg>
       上传课程表
@@ -66,8 +71,17 @@
           <button class="nav-btn today" id="nav-today">今天</button>
           <button class="nav-btn" id="nav-next" aria-label="下一个">›</button>
         </div>
+        <button class="btn small ghost drag-toggle" id="btn-dragmode" hidden
+                title="打开后可直接把课程块拖到其它日期（周视图 / 月视图）">
+          <svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v14M13 3v14M3 7h14M3 13h14"/></svg>
+          <span class="lbl">拖动编辑</span>
+        </button>
         <div class="chips" id="filters"></div>
       </div>
+    </div>
+
+    <div class="drag-hint" id="drag-hint" hidden>
+      拖动编辑已开启：按住课程块拖到其它日期即可改期（只改日期，时间不变）。改完记得点下方「保存到本机」。
     </div>
 
     <div class="view-title" id="view-title">—</div>
@@ -77,6 +91,16 @@
     <div class="panel" id="panel-year" hidden></div>
   </section>
 </main>
+
+<!-- 拖动后的保存条 -->
+<div class="dirty-bar" id="dirty-bar" hidden>
+  <span class="dirty-dot"></span>
+  <span id="dirty-text">有未保存的改动</span>
+  <span class="dirty-actions">
+    <button class="btn small ghost light" id="btn-undo">撤销</button>
+    <button class="btn small primary" id="btn-save-drag">保存到本机</button>
+  </span>
+</div>
 
 <!-- 编辑课程弹窗 -->
 <div class="modal" id="modal-edit" hidden>

@@ -91,6 +91,9 @@ const state = {
   filter: 'all',
   today: startOfDay(new Date()),
   editing: [],
+  editMode: false,                  // 拖动编辑模式
+  savedSnapshot: '',                // 上次保存时的数据快照（判断有没有未保存改动）
+  unpushed: false,                  // 本地已保存但还没推送到线上
 };
 
 /* 「已上 / 待上」的分界线：按本机日期算，跨到第二天就自动往前挪一档 */
@@ -218,8 +221,10 @@ async function loadData() {
     track: TRACK_META[s.track] ? s.track : 'other',
     kind: s.kind || 'lesson',
   }));
+  state.savedSnapshot = snapshotOf();
   applyModeUI();
   renderAll();
+  updateDirtyBar();
 }
 
 /* 按照运行模式切换文案（静态版没有服务端，改动只存本机浏览器） */
@@ -252,6 +257,11 @@ function applyModeUI() {
     const el = $(sel);
     if (el) el.hidden = READONLY;
   });
+  // 拖动编辑 / 推送上线只在可写模式下出现
+  const dragBtn = $('#btn-dragmode');
+  if (dragBtn) dragBtn.hidden = READONLY;
+  if (READONLY && state.editMode) setEditMode(false);
+  syncPushButton();
   const hint = $('#edit-hint');
   if (hint) {
     hint.textContent = isStatic
@@ -412,7 +422,7 @@ function renderWeek() {
     const list = sessionsOn(key);
     const isToday = sameDay(d, state.today);
     return `
-      <div class="week-col ${isToday ? 'is-today' : ''}">
+      <div class="week-col ${isToday ? 'is-today' : ''}" data-date="${key}">
         <div class="week-col-head">
           <span class="dow">${DOW[d.getDay()]}</span>
           <span class="dnum">${d.getDate()}</span>
@@ -456,7 +466,7 @@ function renderMonth() {
     const isToday = sameDay(d, state.today);
     const shown = list.slice(0, 3);
     cells.push(`
-      <div class="month-cell ${dim ? 'dim' : ''} ${isToday ? 'is-today' : ''}">
+      <div class="month-cell ${dim ? 'dim' : ''} ${isToday ? 'is-today' : ''}" data-date="${key}">
         <div class="mnum"><span>${d.getDate()}</span>${list.length > 1 ? `<span class="mn-count">${list.length} 节</span>` : ''}</div>
         ${shown.map((s) => {
           const t = trackOf(s.track);
@@ -621,8 +631,9 @@ $('#panel-year').addEventListener('click', (e) => {
   renderView();
 });
 
-// 点击课程 → 打开编辑
+// 点击课程 → 打开编辑（拖动刚结束时忽略这一次点击）
 document.addEventListener('click', (e) => {
+  if (justDragged) { justDragged = false; e.stopPropagation(); return; }
   const el = e.target.closest('[data-edit]');
   if (el) {
     openEdit(el.dataset.edit);
@@ -662,6 +673,265 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (el.hidden = true), 2600);
 }
+
+/* ============================ 拖动改期 ============================ */
+
+let justDragged = false;   // 刚拖完，吞掉紧随其后的一次点击
+let drag = null;
+
+function snapshotOf() { return JSON.stringify(state.data.sessions); }
+function isDirty() { return state.savedSnapshot !== snapshotOf(); }
+
+/** 相对上次保存，哪些课的日期被改过 */
+function movedList() {
+  let base = [];
+  try { base = JSON.parse(state.savedSnapshot || '[]'); } catch (_) { base = []; }
+  const map = new Map(base.map((s) => [s.id, s]));
+  return state.data.sessions.filter((s) => {
+    const b = map.get(s.id);
+    return b && b.date !== s.date;
+  });
+}
+
+function updateDirtyBar() {
+  const bar = $('#dirty-bar');
+  if (!bar) return;
+  const dirty = isDirty() && !READONLY;
+  bar.hidden = !dirty;
+  document.body.classList.toggle('has-dirty', dirty);
+  if (!dirty) return;
+  const moved = movedList();
+  $('#dirty-text').textContent = moved.length
+    ? `已移动 ${moved.length} 节课，尚未保存`
+    : '课程表有未保存的改动';
+}
+
+function setEditMode(on) {
+  state.editMode = !!on && !READONLY;
+  document.body.classList.toggle('is-dragmode', state.editMode);
+  const btn = $('#btn-dragmode');
+  if (btn) {
+    btn.classList.toggle('on', state.editMode);
+    const lbl = btn.querySelector('.lbl');
+    if (lbl) lbl.textContent = state.editMode ? '拖动编辑 · 开' : '拖动编辑';
+  }
+  const hint = $('#drag-hint');
+  if (hint) hint.hidden = !state.editMode;
+  syncPushButton();
+  if (state.editMode) toast('拖动编辑已开启：按住课程块拖到其它日期');
+}
+
+/** 目标日期格（周视图的某一列 / 月视图的某一格） */
+function dropCellAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  return el ? el.closest('.week-col[data-date], .month-cell[data-date]') : null;
+}
+
+function beginDrag(e) {
+  if (!state.editMode || READONLY) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  const card = e.target.closest('.sess, .mchip');
+  if (!card) return;
+  const sess = state.data.sessions.find((s) => s.id === card.dataset.edit);
+  if (!sess || !sess.date) return;
+  drag = { id: sess.id, card, from: sess.date, x0: e.clientX, y0: e.clientY, active: false, hot: null, ghost: null };
+  window.addEventListener('pointermove', onDragMove, { passive: false });
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);
+}
+
+function onDragMove(e) {
+  if (!drag) return;
+  const dx = e.clientX - drag.x0;
+  const dy = e.clientY - drag.y0;
+  if (!drag.active) {
+    if (Math.hypot(dx, dy) < 6) return;      // 抖动阈值，避免误触
+    startGhost(e);
+  }
+  e.preventDefault();
+  drag.ghost.style.left = e.clientX - drag.offX + 'px';
+  drag.ghost.style.top = e.clientY - drag.offY + 'px';
+  const cell = dropCellAt(e.clientX, e.clientY);
+  if (cell !== drag.hot) {
+    if (drag.hot) drag.hot.classList.remove('drop-hot');
+    drag.hot = cell;
+    if (cell) cell.classList.add('drop-hot');
+  }
+}
+
+function startGhost(e) {
+  drag.active = true;
+  const r = drag.card.getBoundingClientRect();
+  const ghost = drag.card.cloneNode(true);
+  ghost.classList.add('drag-ghost');
+  ghost.style.width = r.width + 'px';
+  ghost.style.left = r.left + 'px';
+  ghost.style.top = r.top + 'px';
+  document.body.appendChild(ghost);
+  drag.ghost = ghost;
+  drag.offX = e.clientX - r.left;
+  drag.offY = e.clientY - r.top;
+  drag.card.classList.add('drag-src');
+  document.body.classList.add('is-dragging');
+}
+
+function endDrag(e) {
+  window.removeEventListener('pointermove', onDragMove);
+  window.removeEventListener('pointerup', endDrag);
+  window.removeEventListener('pointercancel', endDrag);
+  const d = drag;
+  drag = null;
+  if (!d) return;
+  if (d.ghost) d.ghost.remove();
+  if (d.card) d.card.classList.remove('drag-src');
+  if (d.hot) d.hot.classList.remove('drop-hot');
+  document.body.classList.remove('is-dragging');
+  if (!d.active) return;                     // 只是点了一下 → 交给点击编辑
+
+  justDragged = true;
+  setTimeout(() => { justDragged = false; }, 120);
+
+  const cell = e && e.clientX != null ? dropCellAt(e.clientX, e.clientY) : null;
+  const to = cell && cell.dataset.date;
+  if (!to || to === d.from) { toast('放回原处，未改动'); return; }
+  applyMove(d.id, to);
+}
+
+function applyMove(id, to) {
+  const s = state.data.sessions.find((x) => x.id === id);
+  if (!s) return;
+  const from = s.date;
+  s.date = to;
+  sortSessions();
+  renderAll();
+  updateDirtyBar();
+  toast(`「${s.title}」　${fmtMD(from)} → ${fmtMD(to)}`);
+}
+
+function sortSessions() {
+  state.data.sessions.sort((a, b) => {
+    if (!a.date && b.date) return 1;
+    if (a.date && !b.date) return -1;
+    if (a.date === b.date) return (a.start || '99').localeCompare(b.start || '99');
+    return a.date.localeCompare(b.date);
+  });
+}
+
+/** 保存时按日期重排受影响方向的节数（沿用原有编号集合，不新增不删号） */
+function renumberTracks(keys) {
+  let changed = 0;
+  keys.forEach((tk) => {
+    const rows = state.data.sessions
+      .filter((s) => s.track === tk && s.date && /第[一二三四五六七八九十]+节/.test(s.title))
+      .sort((a, b) => (a.date === b.date
+        ? (a.start || '99').localeCompare(b.start || '99')
+        : a.date.localeCompare(b.date)));
+    const nums = rows.map((r) => /第([一二三四五六七八九十]+)节/.exec(r.title)[1]);
+    const asc = nums.slice().sort((a, b) => CN_NUM.indexOf(a) - CN_NUM.indexOf(b));
+    rows.forEach((r, i) => {
+      if (nums[i] === asc[i]) return;
+      r.title = r.title.replace(/第[一二三四五六七八九十]+节/, `第${asc[i]}节`);
+      changed++;
+    });
+  });
+  return changed;
+}
+
+/* --- 交互绑定 --- */
+
+document.addEventListener('pointerdown', beginDrag, { passive: true });
+
+$('#btn-dragmode').addEventListener('click', () => setEditMode(!state.editMode));
+
+$('#btn-undo').addEventListener('click', () => {
+  try {
+    state.data.sessions = JSON.parse(state.savedSnapshot || '[]');
+  } catch (_) {
+    toast('撤销失败：快照损坏');
+    return;
+  }
+  renderAll();
+  updateDirtyBar();
+  toast('已撤销未保存的改动');
+});
+
+$('#btn-save-drag').addEventListener('click', async () => {
+  const btn = $('#btn-save-drag');
+  if (btn.disabled) return;
+  const moved = movedList();
+  const tracks = [...new Set(moved.map((s) => s.track))];
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = '保存中…';
+  try {
+    const renum = renumberTracks(tracks);
+    await persistSessions(state.data.sessions, { github: false });
+    state.savedSnapshot = snapshotOf();
+    state.unpushed = true;
+    renderAll();
+    updateDirtyBar();
+    syncPushButton();
+    toast(
+      `已保存到本机${renum ? `，并按日期重排了 ${renum} 处节数` : ''}` +
+        (canPush() ? ' · 可点右上角「推送上线」' : '')
+    );
+  } catch (err) {
+    toast('保存失败：' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+});
+
+/* --- 推送上线 --- */
+
+function canPush() { return !READONLY && !!GH.get().token; }
+
+function syncPushButton() {
+  const btn = $('#btn-push');
+  if (!btn) return;
+  btn.hidden = READONLY || !state.editMode;
+  btn.classList.toggle('needs-setup', !canPush());
+  const dot = $('#push-dot');
+  if (dot) dot.hidden = !state.unpushed;
+}
+
+$('#btn-push').addEventListener('click', async () => {
+  if (READONLY) return;
+  if (isDirty()) { toast('还有未保存的改动，先点「保存到本机」'); return; }
+  const cfg = GH.get();
+  if (!cfg.token) {
+    toast('还没配置令牌，先填一下仓库和访问令牌');
+    openMaint();
+    return;
+  }
+  const btn = $('#btn-push');
+  const lbl = btn.querySelector('.lbl');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  if (lbl) lbl.textContent = '推送中…';
+  try {
+    const json = JSON.stringify(state.data, null, 2);
+    const sha = await ghCommitFiles(
+      cfg,
+      { 'data/courses.json': json, 'docs/data/courses.json': json },
+      `课程表更新：${new Date().toLocaleString('zh-CN')}`
+    );
+    state.unpushed = false;
+    syncPushButton();
+    toast(`已推送到 GitHub（${sha.slice(0, 7)}），约 1 分钟后线上生效`);
+  } catch (err) {
+    toast('推送失败：' + err.message);
+  } finally {
+    btn.disabled = false;
+    if (lbl) lbl.textContent = '推送上线';
+  }
+});
+
+// 有未保存改动时，离开页面前提醒
+window.addEventListener('beforeunload', (e) => {
+  if (isDirty()) { e.preventDefault(); e.returnValue = ''; }
+});
 
 /* ============================ 维护设置 ============================ */
 
@@ -864,8 +1134,11 @@ $('#btn-save').addEventListener('click', async () => {
   }
 });
 
-/** 保存课程：本地服务写文件，静态版写 localStorage 草稿 */
-async function persistSessions(list) {
+/** 保存课程：本地服务写文件，静态版写 localStorage 草稿
+ *  opts.github === false 时即使配了令牌也只写本机（拖动改期走这条，推送是单独一步）
+ */
+async function persistSessions(list, opts = {}) {
+  const allowGithub = opts.github !== false;
   const payload = { ...state.data, sessions: list, meta: { ...(state.data.meta || {}), total: list.length } };
   if (RUNTIME.mode === 'server') {
     const res = await fetch('api/data', {
@@ -881,7 +1154,7 @@ async function persistSessions(list) {
   localStorage.setItem(RUNTIME.draftKey, JSON.stringify(payload));
 
   const cfg = GH.get();
-  if (EDIT_PARAM && cfg.token) {
+  if (allowGithub && EDIT_PARAM && cfg.token) {
     const json = JSON.stringify(payload, null, 2);
     try {
       const sha = await ghCommitFiles(
