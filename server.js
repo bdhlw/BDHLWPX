@@ -17,7 +17,23 @@ const ROOT = __dirname;
 const PUBLIC = path.join(ROOT, 'public');
 const DATA_FILE = path.join(ROOT, 'data', 'courses.json');
 const BACKUP_DIR = path.join(ROOT, 'data', 'backup');
-const PORT = Number(process.env.PORT || 4173);
+const PORT = Number(process.env.PORT || 8088);
+// 绑定到 0.0.0.0 才能让局域网其它设备访问；只想本机用就设 HOST=127.0.0.1
+const HOST = process.env.HOST || '0.0.0.0';
+
+/** 本机的局域网 IPv4 地址，用来在启动时把访问地址打出来 */
+function lanAddresses() {
+  const out = [];
+  try {
+    const ifs = require('os').networkInterfaces();
+    Object.keys(ifs).forEach((name) => {
+      (ifs[name] || []).forEach((it) => {
+        if (it.family === 'IPv4' && !it.internal) out.push(it.address);
+      });
+    });
+  } catch (_) { /* 读不到就只显示本机地址 */ }
+  return out.length ? out : ['127.0.0.1'];
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -228,6 +244,12 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`课程看板已启动: http://127.0.0.1:${PORT}`);
+server.listen(PORT, HOST, () => {
+  const shown = HOST === '0.0.0.0' ? lanAddresses() : [HOST];
+  console.log('课程看板已启动：');
+  console.log(`  本机   http://127.0.0.1:${PORT}`);
+  shown.forEach((ip) => console.log(`  局域网 http://${ip}:${PORT}`));
+  if (HOST === '0.0.0.0') {
+    console.log('（同一网络的电脑/手机可以直接用上面的局域网地址打开）');
+  }
 });
