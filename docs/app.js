@@ -84,19 +84,16 @@ function renderNowbar() {
   if (week < 1) {
     num.textContent = '—';
     num.style.color = 'var(--muted)';
-    $('#sem-total').textContent = `共 ${total} 周`;
     $('#sem-bar-fill').style.width = '0%';
     foot.textContent = `距开学还有 ${1 - week} 周`;
   } else if (week > total) {
     num.textContent = total;
     num.style.color = 'var(--muted)';
-    $('#sem-total').textContent = `共 ${total} 周`;
     $('#sem-bar-fill').style.width = '100%';
     foot.textContent = `本学期 ${total} 周已全部结束`;
   } else {
     num.textContent = week;
     num.style.color = '';
-    $('#sem-total').textContent = `共 ${total} 周`;
     $('#sem-bar-fill').style.width = `${(week / total) * 100}%`;
     const left = total - week;
     foot.textContent = left > 0
