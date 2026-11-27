@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>编导拍播培训 · 课程看板</title>
-<link rel="stylesheet" href="./styles.css?v=a2d7a76d" />
+<link rel="stylesheet" href="./styles.css?v=0d4b1007" />
 <link rel="icon" href="./assets/logo.png" />
 </head>
 <body>
@@ -38,6 +38,33 @@
 </header>
 
 <main>
+  <!-- 当前时间 / 学期周次 -->
+  <section class="nowbar" id="nowbar">
+    <div class="now-clock-block">
+      <div class="now-row">
+        <span class="now-date" id="now-date">—</span>
+        <span class="now-weekday" id="now-weekday">—</span>
+      </div>
+      <div class="now-row now-row-time">
+        <span class="now-time" id="now-time">—</span>
+        <span class="now-tz">北京时间</span>
+      </div>
+    </div>
+
+    <span class="now-sep"></span>
+
+    <div class="sem-block">
+      <div class="sem-head">
+        <span class="sem-label">本学期 第</span>
+        <span class="sem-num" id="sem-week">—</span>
+        <span class="sem-label">周</span>
+        <span class="sem-total" id="sem-total">共 — 周</span>
+      </div>
+      <div class="sem-bar" id="sem-bar"><span id="sem-bar-fill" style="width:0%"></span></div>
+      <div class="sem-foot" id="sem-foot">—</div>
+    </div>
+  </section>
+
   <!-- 总览 -->
   <section class="overview">
     <div class="card total-card">
@@ -209,8 +236,8 @@
 
 <div class="toast" id="toast" hidden></div>
 
-<script>window.__BUILD__={readonly:true,builtAt:"2026-11-26T05:22:00.114Z"};</script>
-<script src="./docx-client.js?v=a2d7a76d"></script>
-<script src="./app.js?v=a2d7a76d"></script>
+<script>window.__BUILD__={readonly:true,builtAt:"2026-11-27T07:07:28.142Z"};</script>
+<script src="./docx-client.js?v=0d4b1007"></script>
+<script src="./app.js?v=0d4b1007"></script>
 </body>
 </html>

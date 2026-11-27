@@ -49,6 +49,61 @@ function startOfWeek(d) {
   const diff = (x.getDay() + 6) % 7; // 周一为一周开始
   return addDays(x, -diff);
 }
+
+/* ============================ 当前时间 / 学期周次 ============================ */
+
+/** 学期首周的周一 + 总周数；换学期或校历调整时只改这两行 */
+const SEMESTER = { start: '2026-09-04', weeks: 20 };
+
+const WEEKDAY_FULL = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+
+/** 按「开学首周周一」推算当前是第几周（第 1 周 = 起始日起的那一周） */
+function semesterInfo(now = new Date()) {
+  const start = startOfWeek(parseISO(SEMESTER.start)); // 归到所在周的周一
+  const days = Math.floor((startOfDay(now) - start) / 86400000);
+  const week = Math.floor(days / 7) + 1;
+  return { week, total: SEMESTER.weeks, days };
+}
+
+function renderNowbar() {
+  const el = $('#nowbar');
+  if (!el) return;
+  const now = new Date();
+
+  $('#now-date').textContent = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
+  $('#now-weekday').textContent = WEEKDAY_FULL[now.getDay()];
+  $('#now-time').textContent =
+    `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+  const { week, total } = semesterInfo(now);
+  const bar = $('#sem-bar');
+  const num = $('#sem-week');
+  const foot = $('#sem-foot');
+  bar.style.setProperty('--sem-total', total);
+
+  if (week < 1) {
+    num.textContent = '—';
+    num.style.color = 'var(--muted)';
+    $('#sem-total').textContent = `共 ${total} 周`;
+    $('#sem-bar-fill').style.width = '0%';
+    foot.textContent = `距开学还有 ${1 - week} 周`;
+  } else if (week > total) {
+    num.textContent = total;
+    num.style.color = 'var(--muted)';
+    $('#sem-total').textContent = `共 ${total} 周`;
+    $('#sem-bar-fill').style.width = '100%';
+    foot.textContent = `本学期 ${total} 周已全部结束`;
+  } else {
+    num.textContent = week;
+    num.style.color = '';
+    $('#sem-total').textContent = `共 ${total} 周`;
+    $('#sem-bar-fill').style.width = `${(week / total) * 100}%`;
+    const left = total - week;
+    foot.textContent = left > 0
+      ? `已过 ${week} 周 · 还剩 ${left} 周`
+      : '最后一周，学期即将结束';
+  }
+}
 function sameDay(a, b) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
@@ -1326,3 +1381,8 @@ loadData().then(() => {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshToday(); });
   window.addEventListener('focus', refreshToday);
 });
+
+/* 时间条不依赖数据加载，立即渲染并自己走 */
+renderNowbar();
+setInterval(renderNowbar, 20 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) renderNowbar(); });
